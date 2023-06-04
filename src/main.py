@@ -1,24 +1,34 @@
-from matplotlib import pyplot as plt
-from sklearn.datasets import load_wine
-from sklearn.metrics import roc_auc_score, accuracy_score
-from sklearn.model_selection import StratifiedKFold
-import pandas as pd
-from sklearn.preprocessing import StandardScaler
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
+import pandas as pd
 import seaborn as sns
+from matplotlib import pyplot as plt
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.tree import DecisionTreeClassifier
 
-from algorithms.ID3 import ID3
 from algorithms.C45 import C45
-
-
+from algorithms.ID3 import ID3
+from algorithms.SklearnModel import SklearnModel
 
 URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/car/car.data"
 col_names = ['buying', 'maint', 'doors', 'persons', 'lug_boot', 'safety', 'class']
 df = pd.read_csv(URL, names=col_names)
 
+df2 = pd.read_csv('../dane/archive/gender_classification_v7.csv')
 
-def load_preprocessed_data():
+
+def load_preprocessed_data_gender(df=df2):
+    '''
+    Loads data and splits them to X and Y
+    '''
+    modified_data = df.drop(columns=['gender'], axis=1)
+    target = np.array([1 if x == 'Male' else 0 for x in df['gender']])
+
+    return StandardScaler().fit_transform(modified_data.values), target
+
+
+def load_preprocessed_data(df):
     '''
     Loads data and splits them to X and Y
     '''
@@ -30,29 +40,20 @@ def load_preprocessed_data():
 
 def main():
     global df
-    cat2val = {
-        'buying': ['low', 'med', 'high', 'vhigh'],
-        'maint': ['low', 'med', 'high', 'vhigh'],
-        'doors': ['2', '3', '4', '5more'],
-        'persons': ['2', '4', 'more'],
-        'lug_boot': ['small', 'med', 'big'],
-        'safety': ['low', 'med', 'high'],
-        'class': ['unacc', 'acc', 'good', 'vgood'],
-    }
 
     # for column in df.columns:
     #     df[column] = [cat2val[column].index(cat) for cat in df[column]]
     #
-    # X, Y = load_preprocessed_data()
+    X, Y = load_preprocessed_data_gender()
     # print(Y)
     print(len(df))
 
-    df = df.sample(500)
     X, Y = df[df.columns[:-1]], df['class']
 
     classifiers = [
-        ('ID3', ID3(max_depth=5, random_state=42)),
+        ('ID3', ID3(max_depth=5)),
         ('C45', C45(max_depth=5, discrete_features=X.columns, validation_ratio=0.2, random_state=42)),
+        ('DecisionTree', SklearnModel(DecisionTreeClassifier, max_depth=8)),
     ]
 
     accuracies = []
@@ -77,5 +78,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-

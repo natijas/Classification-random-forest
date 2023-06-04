@@ -24,12 +24,11 @@ class Leaf:
 
 
 class ID3:
-    def __init__(self, max_depth, threads=None, random_state=None):
+    def __init__(self, max_depth, threads=None):
         self._max_depth = max_depth
         self._threads = threads
         self._root = None
         self._most_frequent_class = None
-        self.random_state = random_state
 
     def __repr__(self):
         return f'ID3(root={self._root})'

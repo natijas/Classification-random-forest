@@ -1,5 +1,7 @@
 from typing import Dict, Union
-from collections import Counter
+from collections import Counter, defaultdict
+
+import scipy.stats
 
 import numpy as np
 import pandas as pd
@@ -165,7 +167,9 @@ class C45:
         return X.columns[features_gain_ratio.index(max(features_gain_ratio))]
 
     def _fit_algorithm(self, X: pd.DataFrame, Y: pd.Series, depth: int) -> Union[Node, Leaf]:
-        if len(X) == 0 or len(X.columns) == 0 or depth == self._max_depth or Y.nunique() == 1:
+        if len(X) == 0 or len(X.columns) == 0:
+            return Leaf(self._most_frequent_class)
+        if depth == self._max_depth or Y.nunique() == 1:
             return Leaf(Counter(Y).most_common(1)[0][0])
 
         best_column = self._max_gain_ratio(X, Y)
@@ -178,10 +182,10 @@ class C45:
         return Node(best_column, children)
 
     def fit(self, X: pd.DataFrame, Y: pd.Series) -> None:
-        X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=self._validation_ratio)
+        X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=self._validation_ratio, random_state=self.random_state)
 
         self._most_frequent_class = Counter(Y).most_common(1)[0][0]
-        self._root = self._fit_algorithm(X, Y, 0)
+        self._root = self._fit_algorithm(X_train, Y_train, 0)
         self._prune(self._root, X_val, Y_val)
 
     def _error(self, Y_true: pd.Series, Y_pred: pd.Series) -> float:
@@ -198,25 +202,26 @@ class C45:
         if not isinstance(node, Node):
             raise TypeError(f'Expected type Node but got {type(node).__name__}')
 
+        if len(X_val) == 0:
+            return
+
         for value, child in node.children.items():
             if isinstance(child, Node):
-                self._prune(child, X_val, Y_val)
+                self._prune(child, X_val[X_val[child.feature] == value], Y_val[X_val[child.feature] == value])
 
         original_children = node.children
-        node.children = {}
 
-        # try:
-        current_error = self._error(Y_val, self.predict(X_val))
+        original_error = self._error(Y_val, self._predict_node(node, X_val))
+
+        node.children = defaultdict(lambda: Leaf(Counter(Y_val).most_common(1)[0][0]))
+
         pruned_error = self._error(Y_val, self._predict_node(node, X_val))
-        # except Exception as e:
-        #     print("Error calculating pruning: ", e)
-        #     return
 
-        if current_error <= pruned_error:
+        if original_error >= pruned_error:
             # If error is not increased, prune permanently
             return
 
-            # If error is increased, revert pruning
+         # If error is increased, revert pruning
         node.children = original_children
 
     def _predict_node(self, node: Union[Node, Leaf], X: pd.DataFrame) -> np.array:
@@ -228,19 +233,31 @@ class C45:
         elif isinstance(node, Node):
             # If an instance has a missing value for a feature that the tree wants to split on,
             # pass the instance down all branches of the tree, and then take a vote among the leaf nodes it ends up in.
-            results = []
-            for i, row in X.iterrows():
-                if pd.isna(row[node.feature]) or row[node.feature] not in node.children:
+            # results = []
+            # for i, row in X.iterrows():
+            #     if pd.isna(row[node.feature]) or row[node.feature] not in node.children:
+            #         # Missing attribute, pass instance down all branches and collect results
+            #         temp_results = [self._predict_node(child, pd.DataFrame([row]))[0] for child in node.children.values()]
+            #         if not temp_results:
+            #             results.append(self._most_frequent_class)
+            #         else:
+            #             results.append(Counter(temp_results).most_common(1)[0][0])
+            #     else:
+            #         # No missing attribute, pass instance down appropriate branch
+            #         results.append(self._predict_node(node.children[row[node.feature]], pd.DataFrame([row]))[0])
+            results = np.zeros(len(X), dtype=np.array([self._most_frequent_class]).dtype)
+            for value, subX in X.reset_index(drop=True).groupby(node.feature):
+                if pd.isna(value) or node.children.get(value) is None:
                     # Missing attribute, pass instance down all branches and collect results
-                    temp_results = [self._predict_node(child, pd.DataFrame([row]))[0] for child in node.children.values()]
+                    temp_results = [self._predict_node(child, subX) for child in node.children.values()]
                     if not temp_results:
-                        results.append(self._most_frequent_class)
+                        results[subX.index] = [self._most_frequent_class] * len(subX)
                     else:
-                        results.append(Counter(temp_results).most_common(1)[0][0])
+                        results[subX.index] = scipy.stats.mode(np.stack(temp_results), axis=0).mode[0]
                 else:
                     # No missing attribute, pass instance down appropriate branch
-                    results.append(self._predict_node(node.children[row[node.feature]], pd.DataFrame([row]))[0])
-            return np.array(results)
+                    results[subX.index] = self._predict_node(node.children[value], subX)
+            return results
         else:
             raise TypeError(f'Expected type Node or Leaf but got {type(node).__name__}')
 
