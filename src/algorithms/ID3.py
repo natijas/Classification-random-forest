@@ -1,6 +1,6 @@
-from multiprocessing import Pool
-from typing import Dict, Union, Any, Iterable
 from collections import Counter
+from multiprocessing import Pool
+from typing import Dict, Union, Any, Iterable, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -24,11 +24,12 @@ class Leaf:
 
 
 class ID3:
-    def __init__(self, max_depth, threads=None):
+    def __init__(self, max_depth, features_to_use: Optional[List[str]] = None, threads=None):
         self._max_depth = max_depth
         self._threads = threads
         self._root = None
         self._most_frequent_class = None
+        self._features_to_use = features_to_use
 
     def __repr__(self):
         return f'ID3(root={self._root})'
@@ -71,6 +72,8 @@ class ID3:
         fit function, that calculates a root node and most frequent class
         '''
         self._most_frequent_class = Counter(Y).most_common(1)[0][0]
+        if self._features_to_use is not None:
+            X = X[self._features_to_use]
         self._root = self._fit_algorithm(X, Y, 0)
 
     def _predict_single(self, sample: Dict[str, Any]) -> str:
@@ -90,6 +93,8 @@ class ID3:
         '''
         Returns predicted value of terminal Node on X
         '''
+        if self._features_to_use is not None:
+            X = X[self._features_to_use]
         if self._threads is not None:
             with Pool(self._threads) as pool:
                 return pool.map(self._predict_single, [row for _, row in X.iterrows()])

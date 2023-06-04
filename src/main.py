@@ -4,56 +4,24 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import StratifiedKFold
-from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
 from algorithms.C45 import C45
 from algorithms.ID3 import ID3
 from algorithms.SklearnModel import SklearnModel
-
-URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/car/car.data"
-col_names = ['buying', 'maint', 'doors', 'persons', 'lug_boot', 'safety', 'class']
-df = pd.read_csv(URL, names=col_names)
-
-df2 = pd.read_csv('../dane/archive/gender_classification_v7.csv')
+from utils import load_car_dataset, load_gender_dataset
 
 
-def load_preprocessed_data_gender(df=df2):
-    '''
-    Loads data and splits them to X and Y
-    '''
-    modified_data = df.drop(columns=['gender'], axis=1)
-    target = np.array([1 if x == 'Male' else 0 for x in df['gender']])
+def main() -> None:
+    df, discrete_columns = load_gender_dataset()
 
-    return StandardScaler().fit_transform(modified_data.values), target
-
-
-def load_preprocessed_data(df):
-    '''
-    Loads data and splits them to X and Y
-    '''
-    modified_data = df.drop(columns=['class'], axis=1)
-    target = df['class']
-
-    return StandardScaler().fit_transform(modified_data.values), target.values
-
-
-def main():
-    global df
-
-    # for column in df.columns:
-    #     df[column] = [cat2val[column].index(cat) for cat in df[column]]
-    #
-    X, Y = load_preprocessed_data_gender()
-    # print(Y)
-    print(len(df))
-
-    X, Y = df[df.columns[:-1]], df['class']
+    X, Y = df.drop(columns=['target']), df['target']
 
     classifiers = [
-        ('ID3', ID3(max_depth=5)),
-        ('C45', C45(max_depth=5, discrete_features=X.columns, validation_ratio=0.2, random_state=42)),
-        ('DecisionTree', SklearnModel(DecisionTreeClassifier, max_depth=8)),
+        ('ID3', ID3(max_depth=5, features_to_use=list(set(discrete_columns.keys())))),
+        ('C45',
+         C45(max_depth=5, discrete_features=list(discrete_columns.keys()), validation_ratio=0.0, random_state=42)),
+        ('DecisionTree', SklearnModel(DecisionTreeClassifier, max_depth=6, discrete_feature_order=discrete_columns)),
     ]
 
     accuracies = []

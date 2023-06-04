@@ -1,17 +1,16 @@
-from typing import Dict, Union
 from collections import Counter, defaultdict
-
-import scipy.stats
+from typing import Dict, Union, Tuple, Optional
 
 import numpy as np
 import pandas as pd
+import scipy.stats
 from sklearn.model_selection import train_test_split
 
 
-class Node:
+class CategoricalNode:
     def __init__(self, feature, children):
         self.feature = feature
-        self.children: Dict[str, Union[Node, Leaf]] = children
+        self.children: Dict[str, Union[CategoricalNode, ThresholdNode, Leaf]] = children
 
     def __repr__(self, level=0):
         ret = "\t" * level + repr(self.feature) + "\n"
@@ -19,43 +18,27 @@ class Node:
             ret += child.__repr__(level + 1)
         return ret
 
-    def predict(self, instance: pd.Series):
-        if not isinstance(instance, pd.Series):
-            raise TypeError(f'Expected type pd.Series but got {type(instance).__name__}')
 
-        value = instance.get(self.feature)
-        if value is None:
-            raise ValueError(f"Feature {self.feature} not found in the instance")
+class ThresholdNode:
+    def __init__(self, feature, threshold, left_child, right_child):
+        self.feature = feature
+        self.threshold = threshold
+        self.left_child: Union[CategoricalNode, ThresholdNode, Leaf] = left_child
+        self.right_child: Union[CategoricalNode, ThresholdNode, Leaf] = right_child
 
-        child_node = self.children.get(value)
-        if child_node is None:
-            raise ValueError(f"No child node found for value {value} of feature {self.feature}")
+    def __repr__(self, level=0):
+        ret = "\t" * level + repr(self.feature) + "\n"
+        for child in [self.left_child, self.right_child]:
+            ret += child.__repr__(level + 1)
+        return ret
 
-        return child_node.predict(instance)
-
-    def count_nodes(self):
-        count = 1  # self
-        for child in self.children.values():
-            if not isinstance(child, (Node, Leaf)):
-                raise TypeError(f'Expected type Node or Leaf but got {type(child).__name__}')
-
-            if isinstance(child, Node):
-                count += child.count_nodes()
-        return count
 
 class Leaf:
     def __init__(self, label):
         self.label = label
 
     def __repr__(self, level=0):
-        return "\t"*level + "Leaf(" + repr(self.label) + ")" + "\n"
-
-    def predict(self, instance: pd.Series):
-        return self.label
-
-    def count_nodes(self):
-        return 1
-
+        return "\t" * level + "Leaf(" + repr(self.label) + ")" + "\n"
 
 
 class C45:
@@ -120,7 +103,7 @@ class C45:
         gain_ratio = information_gain / split_info
         return gain_ratio
 
-    def _max_gain_ratio(self, X: pd.DataFrame, Y: pd.Series, use_costs=False) -> str:
+    def _max_gain_ratio(self, X: pd.DataFrame, Y: pd.Series, use_costs=False) -> Tuple[str, Optional[float]]:
         if len(X) != len(Y):
             raise ValueError("X and Y must have the same number of rows")
 
@@ -149,9 +132,7 @@ class C45:
                 if best_midpoint is None:
                     raise ValueError(f"Found no valid split for continuous features {col}")
 
-                X[col] = ['<=' + str(best_midpoint) if val <= best_midpoint else '>' + str(best_midpoint) for val in
-                          X[col]]
-                features_gain_ratio.append(max_gain_ratio)
+                features_gain_ratio.append((max_gain_ratio, best_midpoint))
             else:
                 gain_ratio = self._gain_ratio(X, Y, col)
 
@@ -159,30 +140,42 @@ class C45:
                 if use_costs:
                     gain_ratio /= self._attribute_costs[col]
 
-                features_gain_ratio.append(gain_ratio)
+                features_gain_ratio.append((gain_ratio, None))
 
         if not features_gain_ratio:
             raise ValueError("No valid features were found.")
 
-        return X.columns[features_gain_ratio.index(max(features_gain_ratio))]
+        max_i = np.argmax([gain_ratio for gain_ratio, _ in features_gain_ratio])
+        return X.columns[max_i], features_gain_ratio[max_i][1]
 
-    def _fit_algorithm(self, X: pd.DataFrame, Y: pd.Series, depth: int) -> Union[Node, Leaf]:
+    def _fit_algorithm(self, X: pd.DataFrame, Y: pd.Series, depth: int) -> Union[CategoricalNode, ThresholdNode, Leaf]:
         if len(X) == 0 or len(X.columns) == 0:
             return Leaf(self._most_frequent_class)
         if depth == self._max_depth or Y.nunique() == 1:
             return Leaf(Counter(Y).most_common(1)[0][0])
 
-        best_column = self._max_gain_ratio(X, Y)
+        best_column, best_threshold = self._max_gain_ratio(X, Y)
         children = {}
 
-        for value in X[best_column].unique():
-            mask = X[best_column] == value
-            children[value] = self._fit_algorithm(X[mask].drop(columns=best_column), Y[mask], depth + 1)
-
-        return Node(best_column, children)
+        if self._is_continuous(best_column):
+            left_mask = X[best_column] <= best_threshold
+            left_child = self._fit_algorithm(X[left_mask], Y[left_mask], depth + 1)
+            right_child = self._fit_algorithm(X[~left_mask], Y[~left_mask], depth + 1)
+            return ThresholdNode(best_column, best_threshold, left_child, right_child)
+        else:
+            for value in X[best_column].unique():
+                mask = X[best_column] == value
+                children[value] = self._fit_algorithm(X[mask].drop(columns=best_column), Y[mask], depth + 1)
+            return CategoricalNode(best_column, children)
 
     def fit(self, X: pd.DataFrame, Y: pd.Series) -> None:
-        X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=self._validation_ratio, random_state=self.random_state)
+        if self._validation_ratio == 0:
+            X_train = X
+            Y_train = Y
+            X_val = Y_val = []
+        else:
+            X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=self._validation_ratio,
+                                                              random_state=self.random_state)
 
         self._most_frequent_class = Counter(Y).most_common(1)[0][0]
         self._root = self._fit_algorithm(X_train, Y_train, 0)
@@ -197,40 +190,49 @@ class C45:
 
         return (Y_true != Y_pred).mean()
 
-    def _prune(self, node: Union[Node, Leaf], X_val: pd.DataFrame, Y_val: pd.Series) -> None:
+    def _prune(self, node: Union[CategoricalNode, ThresholdNode, Leaf], X_val: pd.DataFrame, Y_val: pd.Series) -> None:
 
-        if not isinstance(node, Node):
+        if not isinstance(node, (CategoricalNode, ThresholdNode)):
             raise TypeError(f'Expected type Node but got {type(node).__name__}')
 
         if len(X_val) == 0:
             return
 
         for value, child in node.children.items():
-            if isinstance(child, Node):
+            if isinstance(child, (CategoricalNode, ThresholdNode)):
                 self._prune(child, X_val[X_val[child.feature] == value], Y_val[X_val[child.feature] == value])
 
-        original_children = node.children
+        if isinstance(node, CategoricalNode):
+            original_children = node.children
 
-        original_error = self._error(Y_val, self._predict_node(node, X_val))
+            original_error = self._error(Y_val, self._predict_node(node, X_val))
+            node.children = defaultdict(lambda: Leaf(Counter(Y_val).most_common(1)[0][0]))
+            pruned_error = self._error(Y_val, self._predict_node(node, X_val))
+            if original_error >= pruned_error:
+                # If error is not increased, prune permanently
+                return
+            # If error is increased, revert pruning
+            node.children = original_children
+        else:
+            original_left_child = node.left_child
+            original_right_child = node.right_child
 
-        node.children = defaultdict(lambda: Leaf(Counter(Y_val).most_common(1)[0][0]))
+            original_error = self._error(Y_val, self._predict_node(node, X_val))
+            node.left_child = node.right_child = Leaf(Counter(Y_val).most_common(1)[0][0])
+            pruned_error = self._error(Y_val, self._predict_node(node, X_val))
 
-        pruned_error = self._error(Y_val, self._predict_node(node, X_val))
+            if original_error >= pruned_error:
+                return
+            node.left_child = original_left_child
+            node.right_child = original_right_child
 
-        if original_error >= pruned_error:
-            # If error is not increased, prune permanently
-            return
-
-         # If error is increased, revert pruning
-        node.children = original_children
-
-    def _predict_node(self, node: Union[Node, Leaf], X: pd.DataFrame) -> np.array:
+    def _predict_node(self, node: Union[CategoricalNode, ThresholdNode, Leaf], X: pd.DataFrame) -> np.array:
         """
         Use the given node to predict the outputs
         """
         if isinstance(node, Leaf):
             return np.array([node.label] * len(X))
-        elif isinstance(node, Node):
+        elif isinstance(node, CategoricalNode):
             # If an instance has a missing value for a feature that the tree wants to split on,
             # pass the instance down all branches of the tree, and then take a vote among the leaf nodes it ends up in.
             # results = []
@@ -257,6 +259,12 @@ class C45:
                 else:
                     # No missing attribute, pass instance down appropriate branch
                     results[subX.index] = self._predict_node(node.children[value], subX)
+            return results
+        elif isinstance(node, ThresholdNode):
+            results = np.zeros(len(X), dtype=np.array([self._most_frequent_class]).dtype)
+            left_mask = X[node.feature] <= node.threshold
+            results[left_mask] = self._predict_node(node.left_child, X[left_mask])
+            results[~left_mask] = self._predict_node(node.right_child, X[~left_mask])
             return results
         else:
             raise TypeError(f'Expected type Node or Leaf but got {type(node).__name__}')
