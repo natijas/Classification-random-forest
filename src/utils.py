@@ -1,5 +1,4 @@
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
 
 
 def load_gender_dataset():

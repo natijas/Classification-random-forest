@@ -9,7 +9,7 @@ from sklearn.tree import DecisionTreeClassifier
 from algorithms.C45 import C45
 from algorithms.ID3 import ID3
 from algorithms.SklearnModel import SklearnModel
-from utils import load_car_dataset, load_gender_dataset
+from utils import load_gender_dataset
 
 
 def main() -> None:
