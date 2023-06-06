@@ -1,3 +1,5 @@
+from functools import partial
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -8,8 +10,9 @@ from sklearn.tree import DecisionTreeClassifier
 
 from algorithms.C45 import C45
 from algorithms.ID3 import ID3
+from algorithms.RandomForest import RandomForest
 from algorithms.SklearnModel import SklearnModel
-from utils import load_gender_dataset
+from utils import load_gender_dataset, load_car_dataset
 
 
 def main() -> None:
@@ -18,10 +21,15 @@ def main() -> None:
     X, Y = df.drop(columns=['target']), df['target']
 
     classifiers = [
-        ('ID3', ID3(max_depth=5, features_to_use=list(set(discrete_columns.keys())))),
-        ('C45',
-         C45(max_depth=5, discrete_features=list(discrete_columns.keys()), validation_ratio=0.0, random_state=42)),
-        ('DecisionTree', SklearnModel(DecisionTreeClassifier, max_depth=6, discrete_feature_order=discrete_columns)),
+        # ('ID3', ID3(max_depth=5, features_to_use=list(set(discrete_columns.keys())))),
+        # ('C45',
+        #  C45(max_depth=5, discrete_features=list(discrete_columns.keys()), validation_ratio=0.0, random_state=42)),
+        ('DecisionTree', SklearnModel(DecisionTreeClassifier, max_depth=50, discrete_feature_order=discrete_columns)),
+        ('RandomForestC45', RandomForest(
+            n_estimators=100,
+            tree_constructor=partial(SklearnModel, DecisionTreeClassifier, max_depth=50, discrete_feature_order=discrete_columns),
+            # tree_constructor=partial(C45, max_depth=5, discrete_features=list(discrete_columns.keys()), validation_ratio=0.0),
+            max_features=5, bootstrap_fraction=0.2)),
     ]
 
     accuracies = []

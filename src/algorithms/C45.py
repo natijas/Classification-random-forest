@@ -130,9 +130,10 @@ class C45:
                         best_midpoint = midpoint
 
                 if best_midpoint is None:
-                    raise ValueError(f"Found no valid split for continuous features {col}")
-
-                features_gain_ratio.append((max_gain_ratio, best_midpoint))
+                    # ignore feature, no viable splits
+                    features_gain_ratio.append((-np.inf, None))
+                else:
+                    features_gain_ratio.append((max_gain_ratio, best_midpoint))
             else:
                 gain_ratio = self._gain_ratio(X, Y, col)
 
@@ -146,6 +147,8 @@ class C45:
             raise ValueError("No valid features were found.")
 
         max_i = np.argmax([gain_ratio for gain_ratio, _ in features_gain_ratio])
+        if np.isinf(-features_gain_ratio[max_i][0]):
+            return None, None  # no features to split on, stopping tree construction
         return X.columns[max_i], features_gain_ratio[max_i][1]
 
     def _fit_algorithm(self, X: pd.DataFrame, Y: pd.Series, depth: int) -> Union[CategoricalNode, ThresholdNode, Leaf]:
@@ -155,6 +158,10 @@ class C45:
             return Leaf(Counter(Y).most_common(1)[0][0])
 
         best_column, best_threshold = self._max_gain_ratio(X, Y)
+        if best_column is None:
+            # no features to split on, stopping tree construction
+            return Leaf(Counter(Y).most_common(1)[0][0])
+
         children = {}
 
         if self._is_continuous(best_column):
@@ -198,11 +205,11 @@ class C45:
         if len(X_val) == 0:
             return
 
-        for value, child in node.children.items():
-            if isinstance(child, (CategoricalNode, ThresholdNode)):
-                self._prune(child, X_val[X_val[child.feature] == value], Y_val[X_val[child.feature] == value])
-
         if isinstance(node, CategoricalNode):
+            for value, child in node.children.items():
+                if isinstance(child, (CategoricalNode, ThresholdNode)):
+                    self._prune(child, X_val[X_val[node.feature] == value], Y_val[X_val[node.feature] == value])
+
             original_children = node.children
 
             original_error = self._error(Y_val, self._predict_node(node, X_val))
@@ -214,6 +221,13 @@ class C45:
             # If error is increased, revert pruning
             node.children = original_children
         else:
+            if isinstance(node.left_child, (CategoricalNode, ThresholdNode)):
+                self._prune(node.left_child, X_val[X_val[node.feature] <= node.threshold],
+                            Y_val[X_val[node.feature] <= node.threshold])
+            if isinstance(node.right_child, (CategoricalNode, ThresholdNode)):
+                self._prune(node.right_child, X_val[X_val[node.feature] > node.threshold],
+                            Y_val[X_val[node.feature] > node.threshold])
+
             original_left_child = node.left_child
             original_right_child = node.right_child
 
