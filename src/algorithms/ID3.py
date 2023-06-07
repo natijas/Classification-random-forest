@@ -5,7 +5,6 @@ from typing import Dict, Union, Any, Iterable, List, Optional
 import numpy as np
 import pandas as pd
 
-
 class Node:
     def __init__(self, feature, children):
         self.feature: str = feature
