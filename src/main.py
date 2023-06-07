@@ -26,10 +26,16 @@ def main() -> None:
         #  C45(max_depth=5, discrete_features=list(discrete_columns.keys()), validation_ratio=0.0, random_state=42)),
         ('DecisionTree', SklearnModel(DecisionTreeClassifier, max_depth=50, discrete_feature_order=discrete_columns)),
         ('RandomForestC45', RandomForest(
-            n_estimators=100,
+            n_estimators=20,
             tree_constructor=partial(SklearnModel, DecisionTreeClassifier, max_depth=50, discrete_feature_order=discrete_columns),
             # tree_constructor=partial(C45, max_depth=5, discrete_features=list(discrete_columns.keys()), validation_ratio=0.0),
-            max_features=5, bootstrap_fraction=0.2)),
+            max_features=6, bootstrap_fraction=0.8)),
+        ('RandomForestC45_noweighting', RandomForest(
+            n_estimators=20,
+            tree_constructor=partial(SklearnModel, DecisionTreeClassifier, max_depth=50,
+                                     discrete_feature_order=discrete_columns),
+            # tree_constructor=partial(C45, max_depth=5, discrete_features=list(discrete_columns.keys()), validation_ratio=0.0),
+            max_features=6, bootstrap_fraction=0.8, sampling_temperature=0)),
     ]
 
     accuracies = []
