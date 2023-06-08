@@ -72,7 +72,7 @@ class ID3:
         '''
         self._most_frequent_class = Counter(Y).most_common(1)[0][0]
         if self._features_to_use is not None:
-            X = X[self._features_to_use]
+            X = X[sorted(set(self._features_to_use).intersection(set(X.columns)))]
         self._root = self._fit_algorithm(X, Y, 0)
 
     def _predict_single(self, sample: Dict[str, Any]) -> str:
@@ -93,7 +93,7 @@ class ID3:
         Returns predicted value of terminal Node on X
         '''
         if self._features_to_use is not None:
-            X = X[self._features_to_use]
+            X = X[sorted(set(self._features_to_use).intersection(set(X.columns)))]
         if self._threads is not None:
             with Pool(self._threads) as pool:
                 return pool.map(self._predict_single, [row for _, row in X.iterrows()])

@@ -42,13 +42,13 @@ class Leaf:
 
 
 class C45:
-    def __init__(self, max_depth, discrete_features, validation_ratio=0.2, random_state=None):
+    def __init__(self, max_depth, discrete_features, validation_ratio=0.2, random_seed=None):
         self._max_depth = max_depth
         self._discrete_features = discrete_features
         self._validation_ratio = validation_ratio
         self._root = None
         self._most_frequent_class = None
-        self.random_state = random_state
+        self.random_seed = random_seed
 
     def __repr__(self):
         return f'C4.5(root={self._root})'
@@ -182,11 +182,12 @@ class C45:
             X_val = Y_val = []
         else:
             X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=self._validation_ratio,
-                                                              random_state=self.random_state)
+                                                              random_state=self.random_seed)
 
         self._most_frequent_class = Counter(Y).most_common(1)[0][0]
         self._root = self._fit_algorithm(X_train, Y_train, 0)
-        self._prune(self._root, X_val, Y_val)
+        if not isinstance(self._root, Leaf):
+            self._prune(self._root, X_val, Y_val)
 
     def _error(self, Y_true: pd.Series, Y_pred: pd.Series) -> float:
         """
@@ -283,7 +284,7 @@ class C45:
         else:
             raise TypeError(f'Expected type Node or Leaf but got {type(node).__name__}')
 
-    def predict(self, X: pd.DataFrame) -> pd.Series:
+    def predict(self, X: pd.DataFrame) -> np.array:
         """
         Predict the outputs for the given inputs
         """

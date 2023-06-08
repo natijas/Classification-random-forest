@@ -11,20 +11,21 @@ from algorithms.ID3 import ID3
 class RandomForest:
     def __init__(self, n_estimators: int, max_features: Union[int, str],
                  tree_constructor: Callable[[], Union[C45, ID3]], bootstrap_fraction: float,
-                 sampling_temperature: float = 1):
+                 sampling_temperature: float = 1, random_seed=None):
         self._n_estimators = n_estimators
         self._max_features = max_features
         self._trees = [tree_constructor() for _ in range(n_estimators)]
         self._tree_features = [[] for _ in range(n_estimators)]
         self._bootstrap_fraction = bootstrap_fraction
         self._sampling_temperature = sampling_temperature
+        self._random_seed = random_seed
 
-    def _generate_bootstrap_samples(self, X: pd.DataFrame, Y: pd.Series, probabilities: np.ndarray) -> tuple:
+    def _generate_bootstrap_samples(self, X: pd.DataFrame, Y: pd.Series, probabilities: np.ndarray, rng: np.random.RandomState) -> tuple:
         if len(X) != len(Y):
             raise ValueError("Inputs X and y must have the same length")
 
-        bootstrap_indices = np.random.choice(range(X.shape[0]), size=round(X.shape[0] * self._bootstrap_fraction),
-                                             replace=True, p=probabilities)
+        bootstrap_indices = rng.choice(range(X.shape[0]), size=round(X.shape[0] * self._bootstrap_fraction),
+                                       replace=True, p=probabilities)
         oob_indices = [i for i in range(len(X)) if i not in bootstrap_indices]
 
         X_bootstrap, Y_bootstrap = X.iloc[bootstrap_indices], Y.iloc[bootstrap_indices]
@@ -64,11 +65,13 @@ class RandomForest:
         # correct_prediction[i] returns a list of bools indicating if a prediction of a tree was correct
         # for a list of trees in which sample i was in OOB set
         correct_prediction: List[List[bool]] = [[] for _ in range(len(X))]
+        
+        rng = np.random.RandomState(self._random_seed)
 
         for i, tree in enumerate(self._trees):
-            self._tree_features[i] = np.random.choice(X.columns, size=max_features, replace=False)
+            self._tree_features[i] = rng.choice(X.columns, size=max_features, replace=False)
             X_bootstrap, Y_bootstrap, oob_indices = self._generate_bootstrap_samples(
-                X[self._tree_features[i]], Y, self._get_sample_probabilities(correct_prediction))
+                X[self._tree_features[i]], Y, self._get_sample_probabilities(correct_prediction), rng)
             tree.fit(X_bootstrap, Y_bootstrap)
 
             correct = tree.predict(X.iloc[oob_indices][self._tree_features[i]]) == Y.iloc[oob_indices]
