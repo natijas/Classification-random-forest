@@ -54,9 +54,9 @@ class ID3:
         '''
         Main ID3 algorithm function, returns a Node or a Leaf
         '''
-        if len(X) == 0 or len(X.columns) == 0:
+        if len(X) == 0:
             return Leaf(self._most_frequent_class)
-        if depth == self._max_depth or Y.nunique() == 1:
+        if depth == self._max_depth or Y.nunique() == 1 or len(X.columns) == 0:
             return Leaf(Counter(Y).most_common(1)[0][0])
 
         best_column = self._max_information_gain(X, Y)

@@ -11,12 +11,13 @@ from algorithms.ID3 import ID3
 class RandomForest:
     def __init__(self, n_estimators: int, max_features: Union[int, str],
                  tree_constructor: Callable[[], Union[C45, ID3]], bootstrap_fraction: float,
-                 sampling_temperature: float = 1, random_seed=None):
+                 bootstrap_replace: bool = False, sampling_temperature: float = 1, random_seed=None):
         self._n_estimators = n_estimators
         self._max_features = max_features
         self._trees = [tree_constructor() for _ in range(n_estimators)]
         self._tree_features = [[] for _ in range(n_estimators)]
         self._bootstrap_fraction = bootstrap_fraction
+        self._bootstrap_replace = bootstrap_replace
         self._sampling_temperature = sampling_temperature
         self._random_seed = random_seed
 
@@ -25,7 +26,7 @@ class RandomForest:
             raise ValueError("Inputs X and y must have the same length")
 
         bootstrap_indices = rng.choice(range(X.shape[0]), size=round(X.shape[0] * self._bootstrap_fraction),
-                                       replace=True, p=probabilities)
+                                       replace=self._bootstrap_replace, p=probabilities)
         oob_indices = [i for i in range(len(X)) if i not in bootstrap_indices]
 
         X_bootstrap, Y_bootstrap = X.iloc[bootstrap_indices], Y.iloc[bootstrap_indices]

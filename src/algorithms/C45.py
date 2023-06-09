@@ -152,9 +152,9 @@ class C45:
         return X.columns[max_i], features_gain_ratio[max_i][1]
 
     def _fit_algorithm(self, X: pd.DataFrame, Y: pd.Series, depth: int) -> Union[CategoricalNode, ThresholdNode, Leaf]:
-        if len(X) == 0 or len(X.columns) == 0:
+        if len(X) == 0:
             return Leaf(self._most_frequent_class)
-        if depth == self._max_depth or Y.nunique() == 1:
+        if depth == self._max_depth or Y.nunique() == 1 or len(X.columns) == 0:
             return Leaf(Counter(Y).most_common(1)[0][0])
 
         best_column, best_threshold = self._max_gain_ratio(X, Y)
