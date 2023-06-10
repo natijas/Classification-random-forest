@@ -48,7 +48,7 @@ class ID3:
         Calculates for each features information gain and returns a feature column with the largest information gain
         '''
         features_entropy = [self._information_gain(X, Y, col) for col in X.columns]
-        return X.columns[features_entropy.index(max(features_entropy))]
+        return X.columns[np.argmax(features_entropy)]
 
     def _fit_algorithm(self, X: pd.DataFrame, Y: pd.Series, depth: int) -> Union[Node, Leaf]:
         '''

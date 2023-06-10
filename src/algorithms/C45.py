@@ -12,11 +12,8 @@ class CategoricalNode:
         self.feature = feature
         self.children: Dict[str, Union[CategoricalNode, ThresholdNode, Leaf]] = children
 
-    def __repr__(self, level=0):
-        ret = "\t" * level + repr(self.feature) + "\n"
-        for child in self.children.values():
-            ret += child.__repr__(level + 1)
-        return ret
+    def __repr__(self):
+        return f'Node({repr(self.feature)}, {repr(self.children)})'
 
 
 class ThresholdNode:
@@ -26,28 +23,28 @@ class ThresholdNode:
         self.left_child: Union[CategoricalNode, ThresholdNode, Leaf] = left_child
         self.right_child: Union[CategoricalNode, ThresholdNode, Leaf] = right_child
 
-    def __repr__(self, level=0):
-        ret = "\t" * level + repr(self.feature) + "\n"
-        for child in [self.left_child, self.right_child]:
-            ret += child.__repr__(level + 1)
-        return ret
+    def __repr__(self):
+        return f'Node({repr(self.feature)}, {repr(self.threshold)}, {repr(self.left_child)}, {repr(self.right_child)})'
 
 
 class Leaf:
     def __init__(self, label):
         self.label = label
 
-    def __repr__(self, level=0):
-        return "\t" * level + "Leaf(" + repr(self.label) + ")" + "\n"
+    def __repr__(self):
+        return f'Leaf({repr(self.label)})'
 
 
 class C45:
-    def __init__(self, max_depth, discrete_features, validation_ratio=0.2, random_seed=None):
+    def __init__(self, max_depth, discrete_features, validation_ratio=0.2, random_seed=None, criterion: str = 'gain_ratio'):
         self._max_depth = max_depth
         self._discrete_features = discrete_features
         self._validation_ratio = validation_ratio
         self._root = None
         self._most_frequent_class = None
+        self._criterion = criterion
+        if criterion not in ['gain_ratio', 'inf_gain']:
+            raise ValueError("unsupported criterion")
         self.random_seed = random_seed
 
     def __repr__(self):
@@ -102,54 +99,69 @@ class C45:
             return 0
         gain_ratio = information_gain / split_info
         return gain_ratio
+    
+    def _inf_gain(self, X: pd.DataFrame, Y: pd.Series, x: str) -> float:
+        entropy = lambda Y: -sum(
+            [counts / len(Y) * np.log(counts / len(Y)) for counts in np.unique(Y, return_counts=True)[1]])
+        divided_entropy = sum([(X[x] == j).sum() / len(X) * entropy(Y[X[x] == j]) for j in X[x].unique()])
+        information_gain = entropy(Y) - divided_entropy
+        return information_gain
+    
+    def _criterion_fn(self, X: pd.DataFrame, Y: pd.Series, x: str) -> float:
+        if self._criterion == 'gain_ratio':
+            return self._gain_ratio(X, Y, x)
+        elif self._criterion == 'inf_gain':
+            return self._inf_gain(X, Y, x)
+        assert 0
+            
 
-    def _max_gain_ratio(self, X: pd.DataFrame, Y: pd.Series, use_costs=False) -> Tuple[str, Optional[float]]:
+    def _best_split(self, X: pd.DataFrame, Y: pd.Series, use_costs=False) -> Tuple[str, Optional[float]]:
         if len(X) != len(Y):
             raise ValueError("X and Y must have the same number of rows")
 
         if use_costs and not hasattr(self, '_attribute_costs'):
             raise ValueError("Attribute costs not defined")
 
-        features_gain_ratio = []
+        split_results = []
         for col in X.columns:
             if self._is_continuous(col):
-                max_gain_ratio = 0
+                max_value = 0
                 best_midpoint = None
 
                 for midpoint in self._possible_splits(X, col):
                     tmp_df = X.copy()
                     tmp_df[col] = ['<=' + str(midpoint) if val <= midpoint else '>' + str(midpoint) for val in X[col]]
-                    gain_ratio = self._gain_ratio(tmp_df, Y, col)
+                    value = self._criterion_fn(tmp_df, Y, col)
 
                     # adjust gain ratio based on attribute cost if necessary
                     if use_costs:
-                        gain_ratio /= self._attribute_costs[col]
+                        value /= self._attribute_costs[col]
 
-                    if gain_ratio > max_gain_ratio:
-                        max_gain_ratio = gain_ratio
+                    if value > max_value:
+                        max_value = value
                         best_midpoint = midpoint
 
                 if best_midpoint is None:
                     # ignore feature, no viable splits
-                    features_gain_ratio.append((-np.inf, None))
+                    split_results.append((-np.inf, None))
                 else:
-                    features_gain_ratio.append((max_gain_ratio, best_midpoint))
+                    split_results.append((max_value, best_midpoint))
             else:
-                gain_ratio = self._gain_ratio(X, Y, col)
+                value = self._criterion_fn(X, Y, col)
 
                 # adjust gain ratio based on attribute cost if necessary
                 if use_costs:
-                    gain_ratio /= self._attribute_costs[col]
+                    value /= self._attribute_costs[col]
 
-                features_gain_ratio.append((gain_ratio, None))
+                split_results.append((value, None))
 
-        if not features_gain_ratio:
+        if not split_results:
             raise ValueError("No valid features were found.")
 
-        max_i = np.argmax([gain_ratio for gain_ratio, _ in features_gain_ratio])
-        if np.isinf(-features_gain_ratio[max_i][0]):
+        max_i = np.argmax([value for value, _ in split_results])
+        if np.isinf(-split_results[max_i][0]):
             return None, None  # no features to split on, stopping tree construction
-        return X.columns[max_i], features_gain_ratio[max_i][1]
+        return X.columns[max_i], split_results[max_i][1]
 
     def _fit_algorithm(self, X: pd.DataFrame, Y: pd.Series, depth: int) -> Union[CategoricalNode, ThresholdNode, Leaf]:
         if len(X) == 0:
@@ -157,7 +169,7 @@ class C45:
         if depth == self._max_depth or Y.nunique() == 1 or len(X.columns) == 0:
             return Leaf(Counter(Y).most_common(1)[0][0])
 
-        best_column, best_threshold = self._max_gain_ratio(X, Y)
+        best_column, best_threshold = self._best_split(X, Y)
         if best_column is None:
             # no features to split on, stopping tree construction
             return Leaf(Counter(Y).most_common(1)[0][0])
