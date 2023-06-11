@@ -57,7 +57,11 @@ class RandomForest:
         accuracy = np.array(
             [np.mean(correct_list) if correct_list else mean_accuracy for correct_list in correct_predictions])
         error = 1 - accuracy
-        sharpened_values = error ** self._sampling_temperature
+        sharpened_values = error.clip(min=0) ** self._sampling_temperature
+        if sharpened_values.sum() < 1e-6:
+            return np.ones(len(correct_predictions)) / len(correct_predictions)  # every sample with equal probability 
+        sharpened_values = sharpened_values / sharpened_values.sum()
+        sharpened_values[sharpened_values < 1e-6] = 1e-6
         return sharpened_values / sharpened_values.sum()
 
     def fit(self, X: pd.DataFrame, Y: pd.Series):
@@ -65,7 +69,7 @@ class RandomForest:
 
         # correct_prediction[i] returns a list of bools indicating if a prediction of a tree was correct
         # for a list of trees in which sample i was in OOB set
-        correct_prediction: List[List[bool]] = [[] for _ in range(len(X))]
+        correct_prediction: List[List[bool]] = [[False] for _ in range(len(X))]
         
         rng = np.random.RandomState(self._random_seed)
 
