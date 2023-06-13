@@ -1,8 +1,9 @@
-from typing import Union, Callable, List
+from typing import Union, Callable, List, Dict, Any
 
 import numpy as np
 import pandas as pd
 import scipy.stats
+from collections import Counter
 
 from algorithms.C45 import C45
 from algorithms.ID3 import ID3
@@ -144,3 +145,23 @@ class RandomForest:
             [tree.predict(X[tree_features]) for tree, tree_features in zip(self._trees, self._tree_features)])
         predictions = scipy.stats.mode(ensemble_preds, axis=0).mode[0]
         return predictions
+    
+    def predict_proba(self, X: np.ndarray) -> List[Dict[Any, float]]:
+        """
+        Predict the labels for the given samples.
+
+        :param X: The input features.
+        :return: The predicted probabilities for every class.
+        """
+        if len(X.shape) != 2:
+            raise ValueError("Input X must be a 2D array")
+
+        if not self._trees:
+            raise ValueError("No trees have been created")
+
+        ensemble_preds = np.stack(
+            [tree.predict(X[tree_features]) for tree, tree_features in zip(self._trees, self._tree_features)], -1)
+        ret = []
+        for sample in ensemble_preds:
+            ret.append({k: v / len(sample) for k, v in Counter(sample).items()})
+        return ret

@@ -39,5 +39,4 @@ def load_car_dataset():
         'persons': ['2', '4', 'more'],
         'lug_boot': ['small', 'med', 'big'],
         'safety': ['low', 'med', 'high'],
-        # 'target': ['unacc', 'acc', 'good', 'vgood'],
     }
