@@ -11,6 +11,7 @@ class SklearnModel:
     A wrapper class for sklearn models that handles the conversion of categorical features to numeric values as
     required by sklearn. It also handles unknown feature values during prediction.
     """
+
     def __init__(self, model_class, discrete_feature_order: Dict[str, List[Any]], **kwargs):
         """
         Initializes the SklearnModel class.

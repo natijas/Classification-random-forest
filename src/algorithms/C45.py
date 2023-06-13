@@ -11,6 +11,7 @@ class CategoricalNode:
     """
     Class to represent a node in a tree structure that splits on categorical features.
     """
+
     def __init__(self, feature, children):
         """
         CategoricalNode constructor.
@@ -40,6 +41,7 @@ class ThresholdNode:
     """
     Class to represent a node in a tree structure that splits on numerical features based on a threshold.
     """
+
     def __init__(self, feature, threshold, left_child, right_child):
         """
         ThresholdNode constructor.
@@ -74,6 +76,7 @@ class Leaf:
     """
     Leaf class that represents a leaf in a tree structure.
     """
+
     def __init__(self, label):
         """
         Leaf constructor.
@@ -99,7 +102,9 @@ class C45:
     """
     Class implementing the C4.5 decision tree algorithm.
     """
-    def __init__(self, max_depth, discrete_features, validation_ratio=0.2, random_seed=None, criterion: str = 'gain_ratio'):
+
+    def __init__(self, max_depth, discrete_features, validation_ratio=0.2, random_seed=None,
+                 criterion: str = 'gain_ratio'):
         """
         Constructor for C4.5 decision tree algorithm.
 
@@ -215,7 +220,7 @@ class C45:
             return 0
         gain_ratio = information_gain / split_info
         return gain_ratio
-    
+
     def _inf_gain(self, X: pd.DataFrame, Y: pd.Series, x: str) -> float:
         """
         Calculates the metric Information Gain for a single attribute `x`.
@@ -230,7 +235,7 @@ class C45:
         divided_entropy = sum([(X[x] == j).sum() / len(X) * entropy(Y[X[x] == j]) for j in X[x].unique()])
         information_gain = entropy(Y) - divided_entropy
         return information_gain
-    
+
     def _criterion_fn(self, X: pd.DataFrame, Y: pd.Series, x: str) -> float:
         """
         Criterion to use, optionally gain ratio or information gain.
@@ -244,7 +249,6 @@ class C45:
         elif self._criterion == 'inf_gain':
             return self._inf_gain(X, Y, x)
         assert 0
-            
 
     def _best_split(self, X: pd.DataFrame, Y: pd.Series, use_costs=False) -> Tuple[str, Optional[float]]:
         """
@@ -462,6 +466,5 @@ class C45:
         """
         if self._root is None:
             raise ValueError("The tree has not been fitted yet")
-
 
         return self._predict_node(self._root, X)

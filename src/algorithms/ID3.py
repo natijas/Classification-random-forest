@@ -5,10 +5,12 @@ from typing import Dict, Union, Any, Iterable, List, Optional
 import numpy as np
 import pandas as pd
 
+
 class Node:
     """
     Node class that represents a node in a tree structure.
     """
+
     def __init__(self, feature, children):
         """
         Node constructor.
@@ -36,6 +38,7 @@ class Leaf:
     """
     Leaf class that represents a leaf in a tree structure.
     """
+
     def __init__(self, value):
         """
         Leaf constructor.
@@ -60,6 +63,7 @@ class ID3:
     ID3 class implements the ID3 (Iterative Dichotomiser 3) algorithm
     for creating a decision tree from a dataset.
     """
+
     def __init__(self, max_depth, features_to_use: Optional[List[str]] = None, threads=None):
         """
         Constructor for ID3 class.

@@ -1,12 +1,12 @@
+from collections import Counter
 from typing import Union, Callable, List, Dict, Any
 
 import numpy as np
 import pandas as pd
 import scipy.stats
-from collections import Counter
 
-from algorithms.C45 import C45
-from algorithms.ID3 import ID3
+import C45
+import ID3
 
 
 class RandomForest:
@@ -14,6 +14,7 @@ class RandomForest:
     RandomForest is an ensemble machine learning algorithm that operates by constructing a multitude of decision trees.
     Prediction from the RandomForest is a majority vote of the predictions of the individual trees.
     """
+
     def __init__(self, n_estimators: int, max_features: Union[int, str],
                  tree_constructor: Callable[[], Union[C45, ID3]], bootstrap_fraction: float,
                  bootstrap_replace: bool = False, sampling_temperature: float = 1, random_seed=None):
@@ -37,7 +38,8 @@ class RandomForest:
         self._sampling_temperature = sampling_temperature
         self._random_seed = random_seed
 
-    def _generate_bootstrap_samples(self, X: pd.DataFrame, Y: pd.Series, probabilities: np.ndarray, rng: np.random.RandomState) -> tuple:
+    def _generate_bootstrap_samples(self, X: pd.DataFrame, Y: pd.Series, probabilities: np.ndarray,
+                                    rng: np.random.RandomState) -> tuple:
         """
         Generate bootstrap samples from the original dataset.
 
@@ -115,7 +117,7 @@ class RandomForest:
         # correct_prediction[i] returns a list of bools indicating if a prediction of a tree was correct
         # for a list of trees in which sample i was in OOB set
         correct_prediction: List[List[bool]] = [[False] for _ in range(len(X))]
-        
+
         rng = np.random.RandomState(self._random_seed)
 
         for i, tree in enumerate(self._trees):
@@ -145,7 +147,7 @@ class RandomForest:
             [tree.predict(X[tree_features]) for tree, tree_features in zip(self._trees, self._tree_features)])
         predictions = scipy.stats.mode(ensemble_preds, axis=0).mode[0]
         return predictions
-    
+
     def predict_proba(self, X: np.ndarray) -> List[Dict[Any, float]]:
         """
         Predict the labels for the given samples.
